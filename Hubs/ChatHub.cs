@@ -139,8 +139,8 @@ public class ChatHub : Hub
             {
                 var messageData = new
                 {
-                    Username = reader.GetString("user_name"),
-                    Message = reader.GetString("message")
+                    // Username = reader.GetString("user_name"),
+                    // Message = reader.GetString("message")
                 };
 
                 messages.Add(messageData);
