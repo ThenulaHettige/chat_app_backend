@@ -21,15 +21,20 @@ public class ChatHub : Hub
         await Clients.All
             .SendAsync("ReceiveMessage", "admin", $"{conn.Username} is joined");
     }
-
-    public async Task JoinSpecificChatRoom(UserConnection conn)
+    
+    private async Task EnsureConnectionOpenAsync()
     {
-        
-        // Ensure the connection is open
         if (_dbConnection.State != System.Data.ConnectionState.Open)
         {
             await _dbConnection.OpenAsync();
         }
+    }
+    
+    public async Task JoinSpecificChatRoom(UserConnection conn)
+    {
+        
+        // Ensure the connection is open
+        await EnsureConnectionOpenAsync();
         
         // Check if room exists in the database, if not, insert it
         string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
@@ -76,10 +81,7 @@ public class ChatHub : Hub
     {
         
         // Ensure the connection is open
-        if (_dbConnection.State != System.Data.ConnectionState.Open)
-        {
-            await _dbConnection.OpenAsync();
-        }
+        await EnsureConnectionOpenAsync();
         
         if (_shared.connections.TryGetValue(Context.ConnectionId, out UserConnection conn))
         {
@@ -108,4 +110,53 @@ public class ChatHub : Hub
                 .SendAsync("ReceiveMessage", conn.Username, msg);
         }
     }
+
+    public async Task FetchHistory(string room_name)
+    {
+        // Ensure the connection is open
+        await EnsureConnectionOpenAsync();
+
+        // Fetch the room ID from the database based on the room name
+        string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
+        MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
+        cmdRoom.Parameters.AddWithValue("@RoomName", room_name);
+
+        var roomId = await cmdRoom.ExecuteScalarAsync();
+
+        if (roomId != null)
+        {
+            // Fetch message history for the specific room ID
+            string queryMessages = "SELECT u.user_name, m.message FROM Message m JOIN User u ON m.user_id = u.user_id WHERE m.room_id = @RoomId ORDER BY m.message_id";
+            MySqlCommand cmdMessages = new MySqlCommand(queryMessages, _dbConnection);
+            cmdMessages.Parameters.AddWithValue("@RoomId", roomId);
+
+            var reader = await cmdMessages.ExecuteReaderAsync();
+
+            var messages = new List<object>();
+
+            // Iterate through the messages and add them to the list
+            while (await reader.ReadAsync())
+            {
+                var messageData = new
+                {
+                    Username = reader.GetString("user_name"),
+                    Message = reader.GetString("message")
+                };
+
+                messages.Add(messageData);
+            }
+
+            await reader.CloseAsync();
+
+            // Send the message history back to the calling client
+            await Clients.Caller.SendAsync("ReceiveHistory", messages);
+        }
+        else
+        {
+            // If no room found, send an error message
+            await Clients.Caller.SendAsync("ReceiveMessage", "admin", $"Room '{room_name}' does not exist.");
+        }
+    }
+
+
 }
