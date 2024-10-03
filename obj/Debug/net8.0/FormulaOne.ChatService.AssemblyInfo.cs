@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FormulaOne.ChatService")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26f6809bf476ce3356dc6566b8835d52d4d25add")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3d0e2cac1365324ecaa7a6784599956d00e8f9cf")]
 [assembly: System.Reflection.AssemblyProductAttribute("FormulaOne.ChatService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FormulaOne.ChatService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

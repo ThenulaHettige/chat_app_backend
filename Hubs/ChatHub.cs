@@ -35,10 +35,9 @@ namespace FormulaOne.ChatService.Hubs
 
         public async Task JoinSpecificChatRoom(UserConnection conn)
         {
-            // Ensure the connection is open
             await EnsureConnectionOpenAsync();
 
-            // Check if room exists in the database, if not, insert it
+            // Check if room exists in the database
             string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
             MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
             cmdRoom.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
@@ -78,15 +77,73 @@ namespace FormulaOne.ChatService.Hubs
             await Clients.Group(conn.ChatRoom)
                 .SendAsync("ReceiveMessage", "admin", $"{conn.Username} has joined {conn.ChatRoom}");
         }
+        
+        
+
+        
+//        public async Task<object> CreateNewRoom(UserConnection conn)
+//        {
+//            // Return an anonymous object with named properties
+//            return new { Username = conn.Username, ChatRoom = conn.ChatRoom };
+//        }
+
+
+
+            public async Task CreateNewRoom(UserConnection conn)
+            {
+                await EnsureConnectionOpenAsync();
+
+                // Check if room exists in the database
+                string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
+                MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
+                cmdRoom.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
+
+                var roomId = await cmdRoom.ExecuteScalarAsync();
+
+                if (roomId == null)
+                {
+                    string insertRoom = "INSERT INTO Room (room_name, room_connection) VALUES (@RoomName, @RoomConnection)";
+                    MySqlCommand insertCmd = new MySqlCommand(insertRoom, _dbConnection);
+                    insertCmd.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
+                    insertCmd.Parameters.AddWithValue("@RoomConnection", Context.ConnectionId);
+                    await insertCmd.ExecuteNonQueryAsync();
+                    roomId = insertCmd.LastInsertedId;
+                }
+                await Groups.AddToGroupAsync(Context.ConnectionId, conn.ChatRoom);
+                _shared.connections[Context.ConnectionId] = conn;
+
+                await Clients.Group(conn.ChatRoom)
+                    .SendAsync("ReceiveMessage", "admin", $"{conn.Username} has joined {conn.ChatRoom}");
+                
+               
+            }
+
+
+        public async Task<List<string>> FetchUserChatRooms(string username)
+        {
+            await EnsureConnectionOpenAsync();
+
+            string query = "SELECT DISTINCT r.room_name FROM message m JOIN user u ON m.user_id = u.user_id JOIN room r ON m.room_id = r.room_id WHERE u.user_name = @Username";
+            MySqlCommand cmd = new MySqlCommand(query, _dbConnection);
+            cmd.Parameters.AddWithValue("@Username", username);
+
+            List<string> chatrooms = new List<string>();
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                chatrooms.Add(reader.GetString("room_name"));
+            }
+
+            return chatrooms;
+        }
 
         public async Task SendMessage(string msg)
         {
-            // Ensure the connection is open
             await EnsureConnectionOpenAsync();
 
             if (_shared.connections.TryGetValue(Context.ConnectionId, out UserConnection conn))
             {
-                // Retrieve user and room id from the database
                 string queryUser = "SELECT user_id FROM User WHERE user_name = @Username";
                 MySqlCommand cmdUser = new MySqlCommand(queryUser, _dbConnection);
                 cmdUser.Parameters.AddWithValue("@Username", conn.Username);
@@ -99,7 +156,6 @@ namespace FormulaOne.ChatService.Hubs
 
                 var roomId = await cmdRoom.ExecuteScalarAsync();
 
-                // Insert message into the database
                 string insertMessage = "INSERT INTO Message (room_id, user_id, message) VALUES (@RoomId, @UserId, @Message)";
                 MySqlCommand insertCmd = new MySqlCommand(insertMessage, _dbConnection);
                 insertCmd.Parameters.AddWithValue("@RoomId", roomId);
@@ -114,10 +170,8 @@ namespace FormulaOne.ChatService.Hubs
 
         public async Task FetchHistory(string room_name)
         {
-            // Ensure the connection is open
             await EnsureConnectionOpenAsync();
 
-            // Fetch the room ID from the database based on the room name
             string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
             MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
             cmdRoom.Parameters.AddWithValue("@RoomName", room_name);
@@ -127,7 +181,6 @@ namespace FormulaOne.ChatService.Hubs
 
             if (roomId != DBNull.Value && int.TryParse(roomId.ToString(), out int roomIdInt))
             {
-                // Fetch message history for the specific room ID
                 string queryMessages = "SELECT u.user_name, m.message FROM User u JOIN Message m ON u.user_id = m.user_id JOIN Room r ON m.room_id = r.room_id WHERE r.room_id = @RoomId";
                 MySqlCommand cmdMessages = new MySqlCommand(queryMessages, _dbConnection);
                 cmdMessages.Parameters.AddWithValue("@RoomId", roomIdInt);
@@ -136,15 +189,10 @@ namespace FormulaOne.ChatService.Hubs
 
                 var messages = new List<object>();
 
-                // Iterate through the messages and add them to the list
                 while (await reader.ReadAsync())
                 {
-                    var username = reader.GetString("user_name"); 
-                    var message = reader.GetString("message");     
-
-                    // Print the username to the terminal
-                    Console.WriteLine($"User: {username}"); 
-                    Console.WriteLine($"Message: {message}"); 
+                    var username = reader.GetString("user_name");
+                    var message = reader.GetString("message");
 
                     var messageData = new
                     {
@@ -155,12 +203,10 @@ namespace FormulaOne.ChatService.Hubs
                     messages.Add(messageData);
                 }
 
-                // Send the message history back to the calling client
                 await Clients.Caller.SendAsync("ReceiveHistory", messages);
             }
             else
             {
-                // If no room found, send an error message
                 await Clients.Caller.SendAsync("ReceiveHistory", "admin", $"Room '{room_name}' does not exist.");
             }
         }
