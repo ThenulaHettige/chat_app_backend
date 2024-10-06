@@ -8,6 +8,16 @@ using System.Threading.Tasks;
 
 namespace FormulaOne.ChatService.Hubs
 {
+    
+    
+    public class UserPayload
+    {
+        public string Firstname { get; set; }
+        public string Lastname { get; set; }
+        public string Email { get; set; }
+        public string Username { get; set; }
+    }
+    
     public class ChatHub : Hub
     {
         private readonly SharedDb _shared;
@@ -63,12 +73,10 @@ namespace FormulaOne.ChatService.Hubs
 
             if (userId == null)
             {
-                string insertUser = "INSERT INTO User (user_name, room_id) VALUES (@Username, @RoomId)";
-                MySqlCommand insertUserCmd = new MySqlCommand(insertUser, _dbConnection);
-                insertUserCmd.Parameters.AddWithValue("@Username", conn.Username);
-                insertUserCmd.Parameters.AddWithValue("@RoomId", roomId);
-                await insertUserCmd.ExecuteNonQueryAsync();
-                userId = insertUserCmd.LastInsertedId;
+                // Register first
+                await Clients.Group(conn.ChatRoom)
+                    .SendAsync("ShowError","User need to register before login.");
+                return;
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, conn.ChatRoom);
@@ -166,37 +174,39 @@ namespace FormulaOne.ChatService.Hubs
             }
         }
 
-        public async Task<string> SignUpUser(string firstname, string lastname, string email, string username)
-        {
-            await EnsureConnectionOpenAsync();
+        public async Task SignUpUser(UserPayload payload)
+        {   
+            Console.WriteLine("Hit SignUpUser");
+            await EnsureConnectionOpenAsync(); // Ensure that the connection to the database is open
+            
             try
             {
                 string insertUserQuery =
-                    "INSERT INTO user (first_name, last_name, email, user_name, room_id) VALUES (@Firstname, @Lastname, @Email, @Username, NULL)";
-                MySqlCommand insertUserCmd = new MySqlCommand(insertUserQuery, _dbConnection);
+                    "INSERT INTO user (first_name, last_name, email, user_name) VALUES (@Firstname, @Lastname, @Email, @Username)";
+        
+                using (MySqlCommand insertUserCmd = new MySqlCommand(insertUserQuery, _dbConnection))
+                {
+                    // Bind parameters from the payload object
+                    insertUserCmd.Parameters.AddWithValue("@Firstname", payload.Firstname);
+                    insertUserCmd.Parameters.AddWithValue("@Lastname", payload.Lastname);
+                    insertUserCmd.Parameters.AddWithValue("@Email", payload.Email);
+                    insertUserCmd.Parameters.AddWithValue("@Username", payload.Username);
 
-                insertUserCmd.Parameters.AddWithValue("@Firstname", firstname);
-                insertUserCmd.Parameters.AddWithValue("@Lastname", lastname);
-                insertUserCmd.Parameters.AddWithValue("@Email", email);
-                insertUserCmd.Parameters.AddWithValue("@Username", username);
+                    // Execute the query asynchronously
+                    await insertUserCmd.ExecuteNonQueryAsync();
+                }
 
-                await insertUserCmd.ExecuteNonQueryAsync();
-
-                return "User registered successfully.";
+                // Optionally send a message back to the client or a group after registration
+                await Clients.Group("Initial")
+                    .SendAsync("ReceiveMessage", "User registered successfully");
             }
             catch (MySqlException ex)
             {
-                // Handle duplicate email error (MySQL error code 1062 for duplicate key)
-                if (ex.Number == 1062)
-                {
-                    return "Error: A user with this email already exists.";
-                }
-                else
-                {
-                    return $"Error: {ex.Message}";
-                }
+                // Handle any potential database errors here
+                Console.WriteLine($"Error during user registration: {ex.Message}");
             }
         }
+
 
 
         public async Task FetchHistory(string room_name)
