@@ -77,10 +77,8 @@ namespace FormulaOne.ChatService.Hubs
             await Clients.Group(conn.ChatRoom)
                 .SendAsync("ReceiveMessage", "admin", $"{conn.Username} has joined {conn.ChatRoom}");
         }
-        
-        
 
-        
+
 //        public async Task<object> CreateNewRoom(UserConnection conn)
 //        {
 //            // Return an anonymous object with named properties
@@ -88,42 +86,41 @@ namespace FormulaOne.ChatService.Hubs
 //        }
 
 
+        public async Task CreateNewRoom(UserConnection conn)
+        {
+            await EnsureConnectionOpenAsync();
 
-            public async Task CreateNewRoom(UserConnection conn)
+            // Check if room exists in the database
+            string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
+            MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
+            cmdRoom.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
+
+            var roomId = await cmdRoom.ExecuteScalarAsync();
+
+            if (roomId == null)
             {
-                await EnsureConnectionOpenAsync();
-
-                // Check if room exists in the database
-                string queryRoom = "SELECT room_id FROM Room WHERE room_name = @RoomName";
-                MySqlCommand cmdRoom = new MySqlCommand(queryRoom, _dbConnection);
-                cmdRoom.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
-
-                var roomId = await cmdRoom.ExecuteScalarAsync();
-
-                if (roomId == null)
-                {
-                    string insertRoom = "INSERT INTO Room (room_name, room_connection) VALUES (@RoomName, @RoomConnection)";
-                    MySqlCommand insertCmd = new MySqlCommand(insertRoom, _dbConnection);
-                    insertCmd.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
-                    insertCmd.Parameters.AddWithValue("@RoomConnection", Context.ConnectionId);
-                    await insertCmd.ExecuteNonQueryAsync();
-                    roomId = insertCmd.LastInsertedId;
-                }
-                await Groups.AddToGroupAsync(Context.ConnectionId, conn.ChatRoom);
-                _shared.connections[Context.ConnectionId] = conn;
-
-                await Clients.Group(conn.ChatRoom)
-                    .SendAsync("ReceiveMessage", "admin", $"{conn.Username} has joined {conn.ChatRoom}");
-                
-               
+                string insertRoom = "INSERT INTO Room (room_name, room_connection) VALUES (@RoomName, @RoomConnection)";
+                MySqlCommand insertCmd = new MySqlCommand(insertRoom, _dbConnection);
+                insertCmd.Parameters.AddWithValue("@RoomName", conn.ChatRoom);
+                insertCmd.Parameters.AddWithValue("@RoomConnection", Context.ConnectionId);
+                await insertCmd.ExecuteNonQueryAsync();
+                roomId = insertCmd.LastInsertedId;
             }
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, conn.ChatRoom);
+            _shared.connections[Context.ConnectionId] = conn;
+
+            await Clients.Group(conn.ChatRoom)
+                .SendAsync("ReceiveMessage", "admin", $"{conn.Username} has joined {conn.ChatRoom}");
+        }
 
 
         public async Task<List<string>> FetchUserChatRooms(string username)
         {
             await EnsureConnectionOpenAsync();
 
-            string query = "SELECT DISTINCT r.room_name FROM message m JOIN user u ON m.user_id = u.user_id JOIN room r ON m.room_id = r.room_id WHERE u.user_name = @Username";
+            string query =
+                "SELECT DISTINCT r.room_name FROM message m JOIN user u ON m.user_id = u.user_id JOIN room r ON m.room_id = r.room_id WHERE u.user_name = @Username";
             MySqlCommand cmd = new MySqlCommand(query, _dbConnection);
             cmd.Parameters.AddWithValue("@Username", username);
 
@@ -156,7 +153,8 @@ namespace FormulaOne.ChatService.Hubs
 
                 var roomId = await cmdRoom.ExecuteScalarAsync();
 
-                string insertMessage = "INSERT INTO Message (room_id, user_id, message) VALUES (@RoomId, @UserId, @Message)";
+                string insertMessage =
+                    "INSERT INTO Message (room_id, user_id, message) VALUES (@RoomId, @UserId, @Message)";
                 MySqlCommand insertCmd = new MySqlCommand(insertMessage, _dbConnection);
                 insertCmd.Parameters.AddWithValue("@RoomId", roomId);
                 insertCmd.Parameters.AddWithValue("@UserId", userId);
@@ -167,6 +165,39 @@ namespace FormulaOne.ChatService.Hubs
                     .SendAsync("ReceiveMessage", conn.Username, msg);
             }
         }
+
+        public async Task<string> SignUpUser(string firstname, string lastname, string email, string username)
+        {
+            await EnsureConnectionOpenAsync();
+            try
+            {
+                string insertUserQuery =
+                    "INSERT INTO user (first_name, last_name, email, user_name, room_id) VALUES (@Firstname, @Lastname, @Email, @Username, NULL)";
+                MySqlCommand insertUserCmd = new MySqlCommand(insertUserQuery, _dbConnection);
+
+                insertUserCmd.Parameters.AddWithValue("@Firstname", firstname);
+                insertUserCmd.Parameters.AddWithValue("@Lastname", lastname);
+                insertUserCmd.Parameters.AddWithValue("@Email", email);
+                insertUserCmd.Parameters.AddWithValue("@Username", username);
+
+                await insertUserCmd.ExecuteNonQueryAsync();
+
+                return "User registered successfully.";
+            }
+            catch (MySqlException ex)
+            {
+                // Handle duplicate email error (MySQL error code 1062 for duplicate key)
+                if (ex.Number == 1062)
+                {
+                    return "Error: A user with this email already exists.";
+                }
+                else
+                {
+                    return $"Error: {ex.Message}";
+                }
+            }
+        }
+
 
         public async Task FetchHistory(string room_name)
         {
@@ -181,7 +212,8 @@ namespace FormulaOne.ChatService.Hubs
 
             if (roomId != DBNull.Value && int.TryParse(roomId.ToString(), out int roomIdInt))
             {
-                string queryMessages = "SELECT u.user_name, m.message FROM User u JOIN Message m ON u.user_id = m.user_id JOIN Room r ON m.room_id = r.room_id WHERE r.room_id = @RoomId";
+                string queryMessages =
+                    "SELECT u.user_name, m.message FROM User u JOIN Message m ON u.user_id = m.user_id JOIN Room r ON m.room_id = r.room_id WHERE r.room_id = @RoomId";
                 MySqlCommand cmdMessages = new MySqlCommand(queryMessages, _dbConnection);
                 cmdMessages.Parameters.AddWithValue("@RoomId", roomIdInt);
 

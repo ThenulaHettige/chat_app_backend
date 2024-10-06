@@ -43,6 +43,7 @@ app.MapControllers();
 
 app.MapHub<ChatHub>("/chat");
 
+
 app.UseCors("reactApp");
 
 app.Run();
