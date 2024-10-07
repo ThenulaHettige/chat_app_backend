@@ -1,3 +1,10 @@
+## Make sure you have the following installed:
+
+- [.NET SDK](https://dotnet.microsoft.com/download)
+- [MySQL](https://www.mysql.com/downloads/)
+- [Node.js and npm](https://nodejs.org/en/download/)
+
+
 ## Adding SinnalR
 
 dotnet add package Microsoft.AspNetCore.SignalR
