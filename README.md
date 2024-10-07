@@ -1,12 +1,12 @@
-Adding SinnalR
+## Adding SinnalR
 
 dotnet add package Microsoft.AspNetCore.SignalR
 
-Run the Application
+## Run the Application
 
 dotnet run
 
-MySQL Workbench Connection
+## MySQL Workbench Connection
 Ensure you have a working connection to your MySQL database in MySQL Workbench
 
 Program.cs: {
@@ -15,7 +15,7 @@ builder.Services.AddScoped<MySqlConnection>(_ => new MySqlConnection("Server=loc
 Repalce it with 
 builder.Services.AddScoped<MySqlConnection>(_ => new MySqlConnection("Server=localhost;Database=chat_db;User=root;Password="YourPassword";"));
 
-make sure to configure
+## make sure to configure
 
 builder.Services.AddCors(opt =>
 {   
@@ -29,7 +29,7 @@ builder.Services.AddCors(opt =>
 });
 
 
-Mapping the SignalR Hub
+## Mapping the SignalR Hub
 app.MapHub<ChatHub>("/chat");
 
 }
